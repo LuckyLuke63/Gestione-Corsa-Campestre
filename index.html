@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { Upload, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Upload, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Save, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const GestioneClassifiche = () => {
   const [atleti, setAtleti] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [filtroSesso, setFiltroSesso] = useState('Tutti');
+  const [editingCell, setEditingCell] = useState(null);
+  const [editValue, setEditValue] = useState('');
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -18,28 +20,41 @@ const GestioneClassifiche = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd/mm/yyyy' });
 
         const atletiProcessati = jsonData.map((row, index) => {
-          const nome = row['Nome'] || '';
-          const cognome = row['Cognome'] || '';
-          const nominativo = row['Nominativo'] || `${nome} ${cognome}`.trim();
-          const sesso = row['Sesso'] || row['sesso'] || '';
+          const nome = row['Nome'] || row['nome'] || '';
+          const cognome = row['Cognome'] || row['cognome'] || '';
+          const nominativo = row['Nominativo'] || row['nominativo'] || `${nome} ${cognome}`.trim();
+          
+          // Gestione data di nascita
+          let dataNascita = '';
+          const dataField = row['Data di nascita'] || row['Data Nascita'] || row['dataNascita'] || row['data di nascita'] || '';
+          if (dataField) {
+            // Se è un numero seriale di Excel
+            if (typeof dataField === 'number') {
+              const date = XLSX.SSF.parse_date_code(dataField);
+              dataNascita = `${String(date.d).padStart(2, '0')}/${String(date.m).padStart(2, '0')}/${date.y}`;
+            } else {
+              dataNascita = dataField;
+            }
+          }
           
           return {
-            pettorale: row['Numero di pettorale'] || row['Pettorale'] || row['pettorale'] || index + 1,
+            id: index,
+            pettorale: row['Numero di pettorale'] || row['Pettorale'] || row['pettorale'] || row['Numero pettorale'] || '',
             cognome: cognome,
             nome: nome,
             nominativo: nominativo,
-            sesso: sesso,
-            dataNascita: row['Data di nascita'] || row['Data Nascita'] || row['dataNascita'] || '',
+            sesso: row['Sesso'] || row['sesso'] || '',
+            dataNascita: dataNascita,
             categoria1: row['Categoria1'] || row['categoria1'] || '',
             societa: row['Società'] || row['Societa'] || row['società'] || row['societa'] || '',
             comitato: row['Comitato'] || row['comitato'] || 'Sondrio',
-            codiceComitato: row['Codice comitato'] || row['Codice Comitato'] || row['codiceComitato'] || 23,
+            codiceComitato: row['Codice comitato'] || row['Codice Comitato'] || row['codiceComitato'] || '23',
             codiceSocieta: row['Codice società'] || row['Codice Società'] || row['Codice societa'] || row['codiceSocieta'] || '',
             tipologia: row['Tipologia'] || row['tipologia'] || 'AT',
-            tessera: row['N° Tessera'] || row['Tessera'] || row['tessera'] || row['N Tessera'] || '',
+            tessera: row['N° Tessera'] || row['Tessera'] || row['tessera'] || row['N Tessera'] || row['N°Tessera'] || '',
             categoria2: row['Categoria2'] || row['categoria2'] || ''
           };
         });
@@ -67,6 +82,36 @@ const GestioneClassifiche = () => {
     setSortConfig({ key, direction });
   };
 
+  const startEdit = (atletaId, field, currentValue) => {
+    setEditingCell({ atletaId, field });
+    setEditValue(currentValue || '');
+  };
+
+  const saveEdit = () => {
+    if (editingCell) {
+      setAtleti(atleti.map(atleta => 
+        atleta.id === editingCell.atletaId 
+          ? { ...atleta, [editingCell.field]: editValue }
+          : atleta
+      ));
+      setEditingCell(null);
+      setEditValue('');
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setEditValue('');
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      cancelEdit();
+    }
+  };
+
   const atletiFiltrati = useMemo(() => {
     let filtered = [...atleti];
     
@@ -79,10 +124,9 @@ const GestioneClassifiche = () => {
         let aVal = a[sortConfig.key];
         let bVal = b[sortConfig.key];
 
-        // Gestione ordinamento numerico per pettorale
         if (sortConfig.key === 'pettorale') {
-          aVal = Number(aVal);
-          bVal = Number(bVal);
+          aVal = Number(aVal) || 0;
+          bVal = Number(bVal) || 0;
         }
 
         if (aVal < bVal) {
@@ -107,9 +151,58 @@ const GestioneClassifiche = () => {
       <ArrowDown className="w-4 h-4" />;
   };
 
+  const EditableCell = ({ atleta, field, value }) => {
+    const isEditing = editingCell?.atletaId === atleta.id && editingCell?.field === field;
+
+    if (isEditing) {
+      return (
+        <div className="flex items-center gap-1">
+          {field === 'sesso' ? (
+            <select
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              className="w-full px-1 py-1 border border-blue-500 rounded focus:outline-none"
+            >
+              <option value="">-</option>
+              <option value="M">M</option>
+              <option value="F">F</option>
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              className="w-full px-1 py-1 border border-blue-500 rounded focus:outline-none"
+            />
+          )}
+          <button onClick={saveEdit} className="text-green-600 hover:text-green-800">
+            <Save className="w-4 h-4" />
+          </button>
+          <button onClick={cancelEdit} className="text-red-600 hover:text-red-800">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        onClick={() => startEdit(atleta.id, field, value)}
+        className="cursor-pointer hover:bg-blue-50 px-1 py-1 rounded min-h-[24px]"
+        title="Clicca per modificare"
+      >
+        {value || '-'}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-full mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">
             Gestione Classifiche Gara Campestre
@@ -159,6 +252,9 @@ const GestioneClassifiche = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
+              <div className="text-sm text-gray-600 mb-2">
+                💡 Clicca su qualsiasi cella per modificarla
+              </div>
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-100">
@@ -277,53 +373,49 @@ const GestioneClassifiche = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {atletiFiltrati.map((atleta, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-2 py-2 font-semibold">
-                        {atleta.pettorale}
+                  {atletiFiltrati.map((atleta) => (
+                    <tr key={atleta.id} className="hover:bg-gray-50">
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="pettorale" value={atleta.pettorale} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.cognome}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="cognome" value={atleta.cognome} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.nome}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="nome" value={atleta.nome} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.nominativo}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="nominativo" value={atleta.nominativo} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2 text-center">
-                        <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
-                          atleta.sesso === 'M' ? 'bg-blue-100 text-blue-800' : 'bg-pink-100 text-pink-800'
-                        }`}>
-                          {atleta.sesso}
-                        </span>
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="sesso" value={atleta.sesso} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2 whitespace-nowrap">
-                        {atleta.dataNascita}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="dataNascita" value={atleta.dataNascita} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.categoria1}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="categoria1" value={atleta.categoria1} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.societa}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="societa" value={atleta.societa} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.comitato}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="comitato" value={atleta.comitato} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2 text-center">
-                        {atleta.codiceComitato}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="codiceComitato" value={atleta.codiceComitato} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.codiceSocieta}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="codiceSocieta" value={atleta.codiceSocieta} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2 text-center">
-                        {atleta.tipologia}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="tipologia" value={atleta.tipologia} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.tessera}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="tessera" value={atleta.tessera} />
                       </td>
-                      <td className="border border-gray-300 px-2 py-2">
-                        {atleta.categoria2}
+                      <td className="border border-gray-300 px-2 py-1">
+                        <EditableCell atleta={atleta} field="categoria2" value={atleta.categoria2} />
                       </td>
                     </tr>
                   ))}

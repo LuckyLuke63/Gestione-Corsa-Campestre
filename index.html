@@ -1,430 +1,432 @@
-import React, { useState, useMemo } from 'react';
-import { Upload, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Save, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
-
-const GestioneClassifiche = () => {
-  const [atleti, setAtleti] = useState([]);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-  const [filtroSesso, setFiltroSesso] = useState('Tutti');
-  const [editingCell, setEditingCell] = useState(null);
-  const [editValue, setEditValue] = useState('');
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
-
-        const atletiProcessati = jsonData.slice(1).map((row, index) => {
-          const nome = row[2] || '';
-          const cognome = row[1] || '';
-          const nominativo = row[3] || `${nome} ${cognome}`.trim();
-          
-          let dataNascita = '';
-          const dataField = row[5] || '';
-          if (dataField) {
-            if (typeof dataField === 'number') {
-              const date = XLSX.SSF.parse_date_code(dataField);
-              dataNascita = `${String(date.d).padStart(2, '0')}/${String(date.m).padStart(2, '0')}/${date.y}`;
-            } else {
-              dataNascita = dataField;
-            }
-          }
-          
-          return {
-            id: index,
-            pettorale: row[0] || '',
-            cognome: cognome,
-            nome: nome,
-            nominativo: nominativo,
-            sesso: row[4] || '',
-            dataNascita: dataNascita,
-            categoria1: row[6] || '',
-            societa: row[7] || '',
-            comitato: row[8] || 'Sondrio',
-            codiceComitato: row[9] || '23',
-            codiceSocieta: row[10] || '',
-            tipologia: row[11] || 'AT',
-            tessera: row[12] || '',
-            categoria2: row[13] || ''
-          };
-        });
-
-        setAtleti(atletiProcessati);
-      } catch (error) {
-        alert('Errore nel caricamento del file: ' + error.message);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const svuotaDatabase = () => {
-    if (window.confirm('Sei sicuro di voler svuotare il database?')) {
-      setAtleti([]);
-      setSortConfig({ key: null, direction: 'asc' });
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gestione Iscritti Corsa Campestre</title>
+  <style>
+    /* Variabili CSS per colori principali */
+    :root {
+      --primary-color: #3b82f6; /* blue-500 */
+      --primary-dark: #2563eb; /* blue-600 */
+      --secondary-bg: #f3f4f6; /* gray-100 */
+      --border-color: #d1d5db; /* gray-300 */
+      --text-color: #1f2937;
     }
-  };
-
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const startEdit = (atletaId, field, currentValue) => {
-    setEditingCell({ atletaId, field });
-    setEditValue(currentValue || '');
-  };
-
-  const saveEdit = () => {
-    if (editingCell) {
-      setAtleti(atleti.map(atleta => 
-        atleta.id === editingCell.atletaId 
-          ? { ...atleta, [editingCell.field]: editValue }
-          : atleta
-      ));
-      setEditingCell(null);
-      setEditValue('');
-    }
-  };
-
-  const cancelEdit = () => {
-    setEditingCell(null);
-    setEditValue('');
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      saveEdit();
-    } else if (e.key === 'Escape') {
-      cancelEdit();
-    }
-  };
-
-  const atletiFiltrati = useMemo(() => {
-    let filtered = [...atleti];
     
-    if (filtroSesso !== 'Tutti') {
-      filtered = filtered.filter(a => a.sesso === filtroSesso);
+    /* Stile generale e container principale */
+    body { 
+      font-family: ui-sans-serif, system-ui, sans-serif, "Arial"; 
+      margin: 0; 
+      padding: 3rem; 
+      background: #f9fafb; /* Sfondo generale */
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 1rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--text-color);
+      margin-bottom: 1.5rem;
+      border-bottom: 2px solid #e5e7eb;
+      padding-bottom: 0.75rem;
     }
 
-    if (sortConfig.key) {
-      filtered.sort((a, b) => {
-        let aVal = a[sortConfig.key];
-        let bVal = b[sortConfig.key];
-
-        if (sortConfig.key === 'pettorale') {
-          aVal = Number(aVal) || 0;
-          bVal = Number(bVal) || 0;
-        }
-
-        if (aVal < bVal) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aVal > bVal) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
+    /* Controlli e filtri */
+    .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: var(--secondary-bg);
+        border-radius: 0.5rem;
+        align-items: center;
     }
 
-    return filtered;
-  }, [atleti, sortConfig, filtroSesso]);
-
-  const SortIcon = ({ columnKey }) => {
-    if (sortConfig.key !== columnKey) {
-      return <ArrowUpDown className="w-4 h-4 opacity-40" />;
+    /* Stile Pulsanti Generici (Importa e Svuota) */
+    #upload-label, #svuota-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
     }
-    return sortConfig.direction === 'asc' ? 
-      <ArrowUp className="w-4 h-4" /> : 
-      <ArrowDown className="w-4 h-4" />;
-  };
+    
+    #upload-label {
+        background-color: var(--primary-color);
+        color: white;
+    }
+    #upload-label:hover {
+        background-color: var(--primary-dark);
+    }
+    #upload { display: none; }
 
-  const EditableCell = ({ atleta, field, value }) => {
-    const isEditing = editingCell?.atletaId === atleta.id && editingCell?.field === field;
+    #svuota-btn {
+        background-color: #ef4444; /* red-500 */
+        color: white;
+        border: none;
+    }
+    #svuota-btn:hover {
+        background-color: #dc2626; /* red-600 */
+    }
 
-    if (isEditing) {
-      return (
-        <div className="flex items-center gap-1">
-          {field === 'sesso' ? (
-            <select
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="w-full px-1 py-1 border border-blue-500 rounded focus:outline-none"
-            >
-              <option value="">-</option>
+    /* Filtro Sesso */
+    .filter-group { display: flex; align-items: center; gap: 0.5rem; }
+    .filter-group label { color: #4b5563; font-weight: 500; }
+    #filtroSesso {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        transition: border-color 0.2s;
+    }
+    #filtroSesso:focus { border-color: var(--primary-color); outline: none; }
+
+    /* Contatore Atleti */
+    .count-display {
+        margin-left: auto;
+        padding: 0.5rem 1rem;
+        background-color: #bfdbfe; /* blue-200 */
+        color: #1e40af; /* blue-800 */
+        font-weight: 700;
+        border-radius: 0.5rem;
+    }
+
+    /* Tabella (Container) */
+    .table-wrapper {
+      overflow-x: auto;
+      max-height: 60vh; /* Permette all'header di essere sticky */
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+    }
+
+    table { 
+      border-collapse: collapse; 
+      width: 100%; 
+      font-size: 0.875rem; /* text-sm */
+    }
+
+    th, td { 
+      padding: 0.5rem 0.75rem; 
+      text-align: left; 
+      border-right: 1px solid #e5e7eb;
+      border-bottom: 1px solid #f3f4f6; 
+    }
+
+    /* Header Fisso (Sticky) */
+    thead tr {
+        background: var(--secondary-bg);
+        color: #4b5563; /* gray-600 */
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+    
+    th button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-weight: 600;
+        color: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 0;
+    }
+    th button:hover { color: var(--primary-dark); }
+
+    /* Righe a Strisce (Zebra Stripes) e Hover */
+    tbody tr:nth-child(even) { background-color: #f9fafb; /* gray-50 */ }
+    tbody tr:hover { background-color: #eff6ff; /* blue-50 */ }
+    
+    /* Indicatore di ordinamento (simulazione icone) */
+    .sort-icon {
+        width: 1rem;
+        height: 1rem;
+        margin-left: 0.25rem;
+        display: inline-block;
+        font-size: 0.8rem;
+        transition: color 0.2s;
+    }
+    
+    .sort-icon.default { color: #9ca3af; }
+    .sort-icon.asc { color: var(--primary-dark); }
+    .sort-icon.desc { color: var(--primary-dark); }
+  </style>
+</head>
+<body>
+    <div class="container">
+      <h1>Gestione Iscritti Corsa Campestre</h1>
+      
+      <div class="controls">
+        <label id="upload-label">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          <span>Importa Excel</span>
+          <input type="file" id="upload" accept=".xls,.xlsx" />
+        </label>
+
+        <button id="svuota-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            Svuota tabella
+        </button>
+
+        <div class="filter-group">
+            <label for="filtroSesso">Filtra per sesso:</label>
+            <select id="filtroSesso">
+              <option value="Tutti">Tutti</option>
               <option value="M">M</option>
               <option value="F">F</option>
             </select>
-          ) : (
-            <input
-              type="text"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="w-full px-1 py-1 border border-blue-500 rounded focus:outline-none"
-            />
-          )}
-          <button onClick={saveEdit} className="text-green-600 hover:text-green-800">
-            <Save className="w-4 h-4" />
-          </button>
-          <button onClick={cancelEdit} className="text-red-600 hover:text-red-800">
-            <X className="w-4 h-4" />
-          </button>
         </div>
-      );
-    }
-
-    return (
-      <div
-        onClick={() => startEdit(atleta.id, field, value)}
-        className="cursor-pointer hover:bg-blue-50 px-1 py-1 rounded min-h-[24px]"
-        title="Clicca per modificare"
-      >
-        {value || '-'}
+        
+        <div class="count-display">
+            Atleti visualizzati: <span id="atleti-count">0</span>
+        </div>
       </div>
-    );
-  };
+      
+      <div id="no-data" style="text-align: center; padding: 4rem; color: #9ca3af; background-color: #f9fafb; border: 2px dashed #e5e7eb; border-radius: 0.75rem;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 1rem; color: #d1d5db;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          <p style="font-size: 1.25rem; font-weight: 600;">Nessun atleta nel database</p>
+          <p style="font-size: 0.875rem; margin-top: 0.25rem;">Carica un file Excel per iniziare</p>
+      </div>
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
-      <div className="max-w-full mx-auto">
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">
-            Gestione Classifiche Gara Campestre
-          </h1>
-
-          <div className="flex flex-wrap gap-4 mb-6">
-            <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
-              <Upload className="w-5 h-5" />
-              <span>Importa Excel</span>
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
-
-            <button
-              onClick={svuotaDatabase}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              disabled={atleti.length === 0}
-            >
-              <Trash2 className="w-5 h-5" />
-              Svuota Database
-            </button>
-
-            <select
-              value={filtroSesso}
-              onChange={(e) => setFiltroSesso(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="Tutti">Tutti</option>
-              <option value="M">Maschile</option>
-              <option value="F">Femminile</option>
-            </select>
-
-            <div className="ml-auto text-gray-600 font-semibold py-2">
-              Atleti: {atletiFiltrati.length}
-            </div>
-          </div>
-
-          {atleti.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <Upload className="w-16 h-16 mx-auto mb-4 opacity-30" />
-              <p className="text-lg">Nessun atleta nel database</p>
-              <p className="text-sm">Carica un file Excel per iniziare</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="text-sm text-gray-600 mb-2">
-                💡 Clicca su qualsiasi cella per modificarla
-              </div>
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('pettorale')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Pettorale <SortIcon columnKey="pettorale" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('cognome')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Cognome <SortIcon columnKey="cognome" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('nome')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Nome <SortIcon columnKey="nome" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('nominativo')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Nominativo <SortIcon columnKey="nominativo" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('sesso')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Sesso <SortIcon columnKey="sesso" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('dataNascita')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Data Nascita <SortIcon columnKey="dataNascita" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('categoria1')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Categoria1 <SortIcon columnKey="categoria1" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('societa')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Società <SortIcon columnKey="societa" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('comitato')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Comitato <SortIcon columnKey="comitato" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('codiceComitato')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Cod. Comitato <SortIcon columnKey="codiceComitato" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('codiceSocieta')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Cod. Società <SortIcon columnKey="codiceSocieta" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('tipologia')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Tipologia <SortIcon columnKey="tipologia" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('tessera')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        N° Tessera <SortIcon columnKey="tessera" />
-                      </button>
-                    </th>
-                    <th className="border border-gray-300 px-2 py-2 text-left whitespace-nowrap">
-                      <button
-                        onClick={() => handleSort('categoria2')}
-                        className="flex items-center gap-1 hover:text-blue-600 w-full"
-                      >
-                        Categoria2 <SortIcon columnKey="categoria2" />
-                      </button>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {atletiFiltrati.map((atleta) => (
-                    <tr key={atleta.id} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="pettorale" value={atleta.pettorale} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="cognome" value={atleta.cognome} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="nome" value={atleta.nome} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="nominativo" value={atleta.nominativo} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="sesso" value={atleta.sesso} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="dataNascita" value={atleta.dataNascita} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="categoria1" value={atleta.categoria1} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="societa" value={atleta.societa} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="comitato" value={atleta.comitato} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="codiceComitato" value={atleta.codiceComitato} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="codiceSocieta" value={atleta.codiceSocieta} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="tipologia" value={atleta.tipologia} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="tessera" value={atleta.tessera} />
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1">
-                        <EditableCell atleta={atleta} field="categoria2" value={atleta.categoria2} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      <div class="table-wrapper" style="display: none;">
+          <table id="tabella">
+            <thead>
+              <tr>
+                <th data-key="pettorale">
+                    <button>Pettorale <span class="sort-icon default">↕</span></button>
+                </th>
+                <th data-key="cognome">
+                    <button>Cognome <span class="sort-icon default">↕</span></button>
+                </th>
+                <th data-key="nome">
+                    <button>Nome <span class="sort-icon default">↕</span></button>
+                </th>
+                <th data-key="sesso">
+                    <button>Sesso <span class="sort-icon default">↕</span></button>
+                </th>
+                <th data-key="dataNascita">
+                    <button>Data Nascita <span class="sort-icon default">↕</span></button>
+                </th>
+                <th data-key="categoria1">
+                    <button>Categoria1 <span class="sort-icon default">↕</span></button>
+                </th>
+                <th data-key="societa">
+                    <button>Società <span class="sort-icon default">↕</span></button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              </tbody>
+          </table>
       </div>
     </div>
-  );
-};
 
-export default GestioneClassifiche;
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <script>
+    let atleti = [];
+    let colonnaOrdinamento = null; 
+    let direzioneOrdinamento = 'asc';
+    
+    // Mappa le chiavi interne del modello dati agli indici della colonna Excel
+    const colonneMappate = {
+        'pettorale': 0, 'cognome': 1, 'nome': 2, 'sesso': 4, 'dataNascita': 5, 'categoria1': 6, 'societa': 7
+    };
+
+    /**
+     * Confronta due valori per l'ordinamento, gestendo numeri, date e stringhe.
+     */
+    function confrontaValori(a, b, colonna, direzione) {
+        let valA = a[colonna];
+        let valB = b[colonna];
+
+        if (colonna === 'pettorale') {
+            valA = Number(valA) || 0;
+            valB = Number(valB) || 0;
+        } else if (colonna === 'dataNascita') {
+            // Conversione da dd/mm/yyyy a yyyymmdd per un confronto numerico corretto delle date
+            const parseDate = (dateStr) => {
+                if (!dateStr || dateStr.length !== 10) return 0;
+                const parts = dateStr.split('/'); // dd/mm/yyyy
+                return Number(parts[2] + parts[1] + parts[0]); 
+            };
+            valA = parseDate(valA);
+            valB = parseDate(valB);
+        } else {
+            valA = String(valA).toLowerCase();
+            valB = String(valB).toLowerCase();
+        }
+
+        let confronto = 0;
+        if (valA > valB) { confronto = 1; } 
+        else if (valA < valB) { confronto = -1; }
+
+        return direzione === 'asc' ? confronto : -confronto;
+    }
+
+    /**
+     * Esegue l'ordinamento dei dati e aggiorna la visualizzazione.
+     */
+    function ordinaTabella(colonna) {
+        if (colonnaOrdinamento === colonna) {
+            direzioneOrdinamento = direzioneOrdinamento === 'asc' ? 'desc' : 'asc';
+        } else {
+            colonnaOrdinamento = colonna;
+            direzioneOrdinamento = 'asc';
+        }
+        atleti.sort((a, b) => confrontaValori(a, b, colonnaOrdinamento, direzioneOrdinamento));
+        renderTabella();
+    }
+    
+    // Assegna il listener di ordinamento a tutte le colonne
+    document.querySelectorAll('#tabella th').forEach((th) => {
+        th.addEventListener('click', (e) => {
+            const colKey = th.getAttribute('data-key');
+            if (colKey) {
+                ordinaTabella(colKey);
+            }
+        });
+    });
+
+    /**
+     * Gestisce il caricamento e l'elaborazione del file Excel.
+     */
+    document.getElementById('upload').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          
+          // Imposta dateNF per leggere le date nel formato dd/mm/yyyy
+          const json = XLSX.utils.sheet_to_json(sheet, { header:1, raw:false, dateNF: 'dd/mm/yyyy' }); 
+          
+          atleti = json.slice(1).map(row => ({
+            pettorale: row[colonneMappate.pettorale] || '',
+            cognome: row[colonneMappate.cognome] || '',
+            nome: row[colonneMappate.nome] || '',
+            sesso: row[colonneMappate.sesso] || '',
+            dataNascita: row[colonneMappate.dataNascita] || '',
+            categoria1: row[colonneMappate.categoria1] || '',
+            societa: row[colonneMappate.societa] || '',
+          }));
+          
+          colonnaOrdinamento = null; 
+          direzioneOrdinamento = 'asc';
+          
+          renderTabella();
+        } catch (err) {
+          alert('Errore nel caricamento del file. Assicurati che il formato sia corretto: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById('filtroSesso').addEventListener('change', renderTabella);
+    document.getElementById('svuota-btn').addEventListener('click', svuotaTabella);
+
+
+    /**
+     * Aggiorna il DOM della tabella applicando filtri e ordinamento.
+     */
+    function renderTabella() {
+      const filtro = document.getElementById('filtroSesso').value;
+      const tbody = document.querySelector('#tabella tbody');
+      const tableWrapper = document.querySelector('.table-wrapper');
+      const noData = document.getElementById('no-data');
+
+      // Aggiorna l'indicatore di ordinamento nell'header
+      document.querySelectorAll('#tabella th').forEach(th => {
+          const icon = th.querySelector('.sort-icon');
+          if (icon) {
+              icon.textContent = '↕';
+              icon.className = 'sort-icon default';
+          }
+      });
+
+      if (colonnaOrdinamento) {
+          const th = document.querySelector(`#tabella th[data-key="${colonnaOrdinamento}"]`);
+          if (th) {
+              const icon = th.querySelector('.sort-icon');
+              if (icon) {
+                  // Simula le frecce: ▲ (crescente) e ▼ (decrescente)
+                  icon.textContent = direzioneOrdinamento === 'asc' ? '▲' : '▼'; 
+                  icon.className = `sort-icon ${direzioneOrdinamento}`;
+              }
+          }
+      }
+      
+      let filtrati = atleti;
+      if (filtro !== 'Tutti') {
+        filtrati = atleti.filter(a => a.sesso === filtro);
+      }
+      
+      tbody.innerHTML = '';
+      document.getElementById('atleti-count').textContent = filtrati.length;
+
+      // Gestione visualizzazione placeholder/tabella
+      if (atleti.length === 0) {
+        noData.style.display = 'block';
+        tableWrapper.style.display = 'none';
+        document.getElementById('atleti-count').textContent = 0;
+        return;
+      } else {
+        noData.style.display = 'none';
+        tableWrapper.style.display = 'block';
+      }
+      
+      if (filtrati.length === 0 && atleti.length > 0) {
+         tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 1.5rem; color: #6b7280;">Nessun atleta trovato con il filtro selezionato.</td></tr>';
+         return;
+      }
+
+      // Popola la tabella con i dati filtrati e ordinati
+      filtrati.forEach(a => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${a.pettorale}</td>
+          <td>${a.cognome}</td>
+          <td>${a.nome}</td>
+          <td>${a.sesso}</td>
+          <td>${a.dataNascita}</td>
+          <td>${a.categoria1}</td>
+          <td>${a.societa}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    /**
+     * Svuota completamente l'array dei dati.
+     */
+    function svuotaTabella() {
+      if (confirm('Sei sicuro di voler svuotare la tabella? Questa azione non può essere annullata.')) {
+        atleti = [];
+        colonnaOrdinamento = null; 
+        direzioneOrdinamento = 'asc';
+        renderTabella();
+      }
+    }
+    
+    // Inizializzazione all'apertura della pagina
+    document.addEventListener('DOMContentLoaded', renderTabella);
+
+  </script>
+</body>
+</html>

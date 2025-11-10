@@ -20,18 +20,16 @@ const GestioneClassifiche = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd/mm/yyyy' });
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
 
-        const atletiProcessati = jsonData.map((row, index) => {
-          const nome = row['Nome'] || row['nome'] || '';
-          const cognome = row['Cognome'] || row['cognome'] || '';
-          const nominativo = row['Nominativo'] || row['nominativo'] || `${nome} ${cognome}`.trim();
+        const atletiProcessati = jsonData.slice(1).map((row, index) => {
+          const nome = row[2] || '';
+          const cognome = row[1] || '';
+          const nominativo = row[3] || `${nome} ${cognome}`.trim();
           
-          // Gestione data di nascita
           let dataNascita = '';
-          const dataField = row['Data di nascita'] || row['Data Nascita'] || row['dataNascita'] || row['data di nascita'] || '';
+          const dataField = row[5] || '';
           if (dataField) {
-            // Se è un numero seriale di Excel
             if (typeof dataField === 'number') {
               const date = XLSX.SSF.parse_date_code(dataField);
               dataNascita = `${String(date.d).padStart(2, '0')}/${String(date.m).padStart(2, '0')}/${date.y}`;
@@ -42,20 +40,20 @@ const GestioneClassifiche = () => {
           
           return {
             id: index,
-            pettorale: row['Numero di pettorale'] || row['Pettorale'] || row['pettorale'] || row['Numero pettorale'] || '',
+            pettorale: row[0] || '',
             cognome: cognome,
             nome: nome,
             nominativo: nominativo,
-            sesso: row['Sesso'] || row['sesso'] || '',
+            sesso: row[4] || '',
             dataNascita: dataNascita,
-            categoria1: row['Categoria1'] || row['categoria1'] || '',
-            societa: row['Società'] || row['Societa'] || row['società'] || row['societa'] || '',
-            comitato: row['Comitato'] || row['comitato'] || 'Sondrio',
-            codiceComitato: row['Codice comitato'] || row['Codice Comitato'] || row['codiceComitato'] || '23',
-            codiceSocieta: row['Codice società'] || row['Codice Società'] || row['Codice societa'] || row['codiceSocieta'] || '',
-            tipologia: row['Tipologia'] || row['tipologia'] || 'AT',
-            tessera: row['N° Tessera'] || row['Tessera'] || row['tessera'] || row['N Tessera'] || row['N°Tessera'] || '',
-            categoria2: row['Categoria2'] || row['categoria2'] || ''
+            categoria1: row[6] || '',
+            societa: row[7] || '',
+            comitato: row[8] || 'Sondrio',
+            codiceComitato: row[9] || '23',
+            codiceSocieta: row[10] || '',
+            tipologia: row[11] || 'AT',
+            tessera: row[12] || '',
+            categoria2: row[13] || ''
           };
         });
 
